@@ -1,5 +1,4 @@
 from tkinter import *
-from .game import GameWindow
 
 class MainMenu():
     def __init__(self, root: Tk):
