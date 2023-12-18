@@ -77,12 +77,15 @@ class GameWindow(Toplevel):
             pady=1,
         )
         self.squares[f"{column},{row}"].grid(column=column, row=row, padx=1, pady=1, ipadx=1, ipady=1)
+    
+    def set_square_hidden(self, column: int, row: int):
+        self.squares[f"{column},{row}"].configure(text=" ", bg="gray70", relief="raised")
 
     def set_square_flagged(self, column: int, row: int):
         flag_font = tkFont.Font(weight='bold', size=12, underline=True)
         self.squares[f"{column},{row}"].configure(text="F", font=flag_font, fg="red2")
 
-    def set_square_display_number(self, column: int, row: int, value):
+    def set_square_display_number_or_mine(self, column: int, row: int, value):
         text_color = self.color_dict[value]
         value_font = tkFont.Font(weight='bold', size=12)
         if (value == -1):
@@ -92,12 +95,11 @@ class GameWindow(Toplevel):
             bg="gray80",
             fg=text_color,
             font=value_font,
-            borderwidth=2,
             relief="sunken",
         )
 
     def set_mines_remaining(self, mines_remaining: int):
-        if (mines_remaining < 5):
+        if (mines_remaining < 10):
             mines_remaining = f"0{mines_remaining}"
         self.mines_remaining_label.configure(text=f"{mines_remaining}")
 

@@ -16,19 +16,18 @@ class Minesweeper(object):
     """
     A model for a Minesweeper board.
     Important info:
-    explain the self.grid
+    explain self.grid
     """
     def __init__(self, config: GameConfig) -> None:
         self.rows = config.rows
         self.columns = config.columns
         self.mines = config.mines
-        self.create_new_grid()
+        self.grid = self.create_empty_grid()
         self.game_state = GameState.ACTIVE
         self.mines_remaining = self.mines
 
-    def create_new_grid(self):
-        self.grid = self.create_empty_grid()
-        self.add_mines()
+    def set_grid_values(self, first_click_column: int, first_click_row: int):
+        self.add_mines(first_click_column, first_click_row)
         self.add_number_of_adjecent_mines()
 
     def create_empty_grid(self):
@@ -40,12 +39,18 @@ class Minesweeper(object):
             grid.append(column)
         return grid
 
-    def add_mines(self):
+    def add_mines(self, first_click_column: int, first_click_row: int):
+        no_mines_list = [(first_click_column, first_click_row)]
+        def add_to_no_mines_list(adjecent_column, adjecent_row):
+            no_mines_list.append((adjecent_column, adjecent_row))
+
+        self.evaluate_adjecent_squares(first_click_column, first_click_row, add_to_no_mines_list)
+
         added_mines = 0
         while added_mines < self.mines:
             column = random.randint(0, self.columns-1)
             row = random.randint(0, self.rows-1)
-            if (self.get_square_value(column, row) != -1):
+            if (self.get_square_value(column, row) != -1 and (column, row) not in no_mines_list):
                 self.grid[row][column]["value"] = -1
                 added_mines += 1
     
@@ -68,7 +73,7 @@ class Minesweeper(object):
     def update_square_state(self, column: int, row: int, new_state: SquareState):
         self.grid[row][column]["state"] = new_state
     
-    def reveal_square(self, column: int, row: int):
+    def reveal_square(self, column: int, row: int) -> list[tuple[int, int]]:
         self.just_revealed_squares = []
         self._reveal_square(column, row)
         return self.just_revealed_squares
@@ -136,20 +141,10 @@ class Minesweeper(object):
         self.update_square_state(column, row, SquareState.HIDDEN)
     
     def check_for_win(self):
-    # Loses are checked every time a mine is revealed so we only need to check for the win condition here
+        # Loses are checked every time a mine is revealed so we only need to check for the win condition here
         for row in self.grid:
             for square in row:
                 if (square["state"] == SquareState.HIDDEN and square["value"] != -1):
-                    self.game_state = GameState.ACTIVE
-                    return False
+                    return
+
         self.game_state = GameState.WON
-
-    def print_grid(self):
-        for x in self.grid:
-            print(x)
-
-
-if __name__ == "__main__":
-    m = Minesweeper(10, 5, 2)
-    m.create_new_grid()
-    m.print_grid()
