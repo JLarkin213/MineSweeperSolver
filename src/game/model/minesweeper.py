@@ -1,6 +1,6 @@
 import random
 
-from minesweeper.model.gameconfig import GameConfig
+from game.model.gameconfig import GameConfig
 
 class SquareState():
     HIDDEN = "h"
@@ -142,9 +142,10 @@ class Minesweeper(object):
     
     def check_for_win(self):
         # Loses are checked every time a mine is revealed so we only need to check for the win condition here
-        for row in self.grid:
-            for square in row:
+        for column in self.grid:
+            for square in column:
                 if (square["state"] == SquareState.HIDDEN and square["value"] != -1):
                     return
 
         self.game_state = GameState.WON
+
