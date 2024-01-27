@@ -88,10 +88,17 @@ class Minesweeper(object):
             self.just_revealed_squares.append((column, row))
             if (square_value == -1):
                 self.game_state = GameState.LOST
+                self.reveal_all_squares()
             elif (square_value == 0):
                 self.reveal_adjecent_squares(column, row)
         elif (self.get_number_of_adjecent_flags(column, row) == square_value):
             self.reveal_adjecent_squares(column, row)
+
+    def reveal_all_squares(self):
+        for column in range(self.columns):
+            for row in range(self.rows):
+                if (self.get_square_state(column, row) != SquareState.FLAGGED):
+                    self.update_square_state(column, row, SquareState.REVEALED)
 
     def reveal_adjecent_squares(self,column: int, row: int):
         def reveal_adjecent_square(adjecent_column, adjecent_row):
