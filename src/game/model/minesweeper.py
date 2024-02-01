@@ -76,6 +76,8 @@ class Minesweeper(object):
     def reveal_square(self, column: int, row: int) -> list[tuple[int, int]]:
         self.just_revealed_squares = []
         self._reveal_square(column, row)
+        if self.game_state != GameState.LOST: 
+            self.check_for_win()
         return self.just_revealed_squares
     
     def _reveal_square(self, column: int, row: int):

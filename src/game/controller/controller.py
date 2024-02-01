@@ -22,7 +22,6 @@ class Controller():
         self.top_buffer = 60
 
     def start_for_normal_user(self):
-        self.config.set_to_intermediate()
         self.new_game()
 
         self.init_pygame()

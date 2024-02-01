@@ -1,17 +1,13 @@
 from PPO_solver.minesweeper_env import MinesweeperEnv
 
-import optuna
-
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import HParam
 from stable_baselines3.common.monitor import Monitor
-
-def eval_callback(locals, globals):
-    print(f"locals: {locals['reward']} - {locals['done']}")
 
 class TensorboardCallback(BaseCallback):
     """
@@ -19,6 +15,8 @@ class TensorboardCallback(BaseCallback):
     """
 
     def __init__(self, verbose=0):
+        self.total_episodes = []
+        self.wins = []
         super().__init__(verbose)
 
     def _on_training_start(self) -> None:
@@ -37,20 +35,45 @@ class TensorboardCallback(BaseCallback):
         metric_dict = {
             "rollout/ep_len_mean": 0,
             "rollout/ep_rew_mean": 0,
+            "custom/win_rate": 0,
         }
         self.logger.record(
             "hparams",
             HParam(hparam_dict, metric_dict),
             exclude=("stdout", "log", "json", "csv"),
         )
+
+        self.logger.record("custom/total_episodes", 0)
+        self.logger.record("custom/win_rate", 0)
         
     def _on_step(self) -> bool:
-        # if self.training_env.get_attr("reset_stats_next_step"):
-        #     rewards_this_episode = self.training_env.get_attr("reward_this_episode")
-        #     steps_this_episode = self.training_env.get_attr("steps_this_episode")
-        #     for i in range(self.locals['env'].num_envs):
-        #         self.logger.record("env_stats/rew_per_eps", rewards_this_episode[i])
-        #         self.logger.record("env_stats/steps_per_eps", steps_this_episode[i])
+        dones = self.locals["dones"]
+        infos = self.locals["infos"]
+        for idx, done in enumerate(dones):
+            if (done):
+                try:
+                    self.total_episodes[idx] += 1
+                except IndexError:
+                    self.total_episodes.append(1)
+
+                if (infos[idx]["win"]):
+                    try:
+                        self.wins[idx] += 1
+                    except IndexError:
+                        self.wins.append(1)
+                
+                if (self.total_episodes[idx] % 100 == 0):
+                    try:
+                        wins = self.wins[idx]
+                    except IndexError:
+                        wins = 0
+                        self.wins.append(0)
+
+                    win_rate = wins/100
+                    self.logger.record("custom/total_episodes", self.total_episodes[idx])
+                    self.logger.record("custom/win_rate", win_rate)
+
+                    self.wins[idx] = 0
         return True
 
 def make_env(env, rank: int, seed: int = 0):
@@ -68,11 +91,23 @@ def make_env(env, rank: int, seed: int = 0):
     set_random_seed(seed)
     return _init
 
-def train(file_name, new=True):
-    log_dir = "tensor_dir_opt"
-    env = MinesweeperEnv(render_mode=None)
+def train(timesteps, file_name, log_dir, new=True, mines_overide=None, model_params=None):
+    env = MinesweeperEnv(render_mode=None, mines_overide=mines_overide)
+    check_env(env)
     num_cpu = 3
     # vec_env = SubprocVecEnv([make_env(env, i) for i in range(num_cpu)], start_method="spawn")
+    if not model_params:
+        model_params = {
+            "learning_rate": .0003,
+            "gamma": .985,
+            "gae_lambda": .94,
+            "n_steps": 4096,
+            "batch_size": 128,
+            "n_epochs": 30,
+            "clip_range": .2,
+            "ent_coef": .015,
+            "vf_coef": .95,
+        }
 
     if new:
         model = PPO(
@@ -81,52 +116,43 @@ def train(file_name, new=True):
             verbose=2,
             stats_window_size=100,
             tensorboard_log=log_dir,
-            learning_rate=.0002626,
-            gamma=.9798,
-            # gae_lambda=.95,
-            # n_steps=2048,
-            # batch_size=128,
-            # n_epochs=3,
-            ent_coef=.0053143,
-            vf_coef=.98106,
+            **model_params
         )
     else:
-        model = PPO.load(file_name, env=env)
+        model = PPO.load(file_name)
+        model.set_env(env)
     
-    for i in range(1):
-        model.learn(
-            total_timesteps=1_000_000,
-            callback=TensorboardCallback(),
-            tb_log_name=file_name,
-            reset_num_timesteps=(i==0 and new)
-        )
-        model.save(file_name)
-        # run(file_name)
-
-def run(file_name):
-    env = MinesweeperEnv(render_mode="human")
-    m_env = Monitor(env)
-    model = PPO.load(file_name, env=m_env)
-    mean_reward, _ = evaluate_policy(
-        model,
-        m_env,
-        deterministic=False,
-        n_eval_episodes=10,
-        callback=eval_callback
+    model.learn(
+        total_timesteps=timesteps,
+        callback=TensorboardCallback(),
+        tb_log_name=file_name,
+        reset_num_timesteps=new
     )
-    print(f"mean_reward: {mean_reward}")
-    # obs = vec_env.reset()
-    # games = 0
-    # while games < 6:
-        # action, _states = model.predict(obs)
-    #     obs, rewards, dones, info = vec_env.step(action)
-    #     print(f"Reward: {rewards} Dones: {dones} Action: {action}")
-    #     if dones: games += 1
+    model.save(file_name)
+    del model
 
-if __name__ == "__main__":
-    # file_name = "test7"
+class EvaluteModel(object):
+    def __init__(self) -> None:
+        self.wins = 0
 
-    # train(file_name, new=False)
+    def run(self, file_name, eval_episodes, render_mode="human", mines_overide=None):
+        env = MinesweeperEnv(render_mode=render_mode, mines_overide=mines_overide)
+        m_env = Monitor(env)
+        model = PPO.load(file_name, env=env)
+        mean_reward, _ = evaluate_policy(
+            model,
+            m_env,
+            deterministic=False,
+            n_eval_episodes=eval_episodes,
+            callback=self._eval_callback
+        )
+        win_rate = self.wins/eval_episodes
 
-    # run(file_name)
+        return win_rate, mean_reward
+
+    def _eval_callback(self, locals, globals):
+        if (locals["infos"][0]["win"]):
+            self.wins += 1
+        # print(f"locals: {locals['reward']} - {locals['done']}")
+        # print(f"Obs Space: {locals['new_observations']}")
     
